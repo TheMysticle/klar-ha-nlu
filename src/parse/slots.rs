@@ -31,13 +31,33 @@ pub(crate) fn all_lights_clause(
         return None;
     }
     if except_tail(tokens).is_some() {
-        return except_all_lights(tokens, home, action, number);
+        return all_lights_by_room(tokens, home, action, number);
     }
     let home_wide = whole_home_lights(home);
     let rooms: Vec<&String> = areas.iter().filter(|a| home_wide.is_none_or(|e| e.area.as_deref() != Some(a.as_str()))).collect();
     if rooms.is_empty() {
-        let e = home_wide?;
-        return Some(ClauseOut::Intents(vec![fill_intent(action, tokens, number, Some(&e.entity_id), e.area.as_deref(), Some("light"))]));
+        if let Some(e) = home_wide {
+            return Some(ClauseOut::Intents(vec![fill_intent(
+                action,
+                tokens,
+                number,
+                Some(&e.entity_id),
+                e.area.as_deref(),
+                Some("light"),
+            )]));
+        }
+        // NO all-lights GROUP AND NO ROOM NAMED, which is the ordinary case:
+        // "turn off all the lights" names no room, and most homes have no
+        // group entity covering every light. This branch was missing, so the
+        // whole handler gave up and the sentence fell through to session
+        // replay -- reported from a live house as "turn on kitchen lights"
+        // followed by "turn off all the lights" switching off the KITCHEN
+        // only, and announcing that as success.
+        //
+        // One intent per room that has a light, which is what the except
+        // path below already builds; with no except tail its skip sets are
+        // empty, so it is the same fan-out without exclusions.
+        return all_lights_by_room(tokens, home, action, number);
     }
     let intents: Vec<Intent> = rooms
         .into_iter()
@@ -50,7 +70,11 @@ pub(crate) fn all_lights_clause(
     (!intents.is_empty()).then_some(ClauseOut::Intents(intents))
 }
 
-fn except_all_lights(tokens: &[String], home: &HomeGraph, action: Action, number: Option<i32>) -> Option<ClauseOut> {
+/// Every room that has a light, one intent each, minus anything excepted.
+///
+/// Also the plain "all the lights" path: with no except tail the skip sets
+/// below come back empty, so this is simply a fan-out over the home.
+fn all_lights_by_room(tokens: &[String], home: &HomeGraph, action: Action, number: Option<i32>) -> Option<ClauseOut> {
     let skip_areas = excepted_areas(tokens, home);
     let skip = if skip_areas.is_empty() { excepted_light_ids(tokens, home) } else { HashSet::new() };
     let mut intents = Vec::new();

@@ -260,3 +260,115 @@ fn one_is_still_a_number_when_it_is_one() {
     let plan = plan("set the living room lights to one percent");
     assert_eq!(plan.steps[0].intent.slot("brightness"), Some("1"), "{plan:#?}");
 }
+
+// --- 8. a bare "stop" stops what is making noise -------------------------
+
+/// Tags the living room player "music", which is what a labelled Spotify
+/// player looks like to Klar -- `home::roles::is_music_player` reads tags.
+/// The shipped fixture has none, so without this no player qualifies and
+/// every media sentence is rejected for want of a target, which says nothing
+/// about the phrasing.
+fn home_with_music_player() -> HomeGraph {
+    let mut home = home();
+    for entity in home.entities.iter_mut() {
+        if entity.entity_id == "media_player.lg_dsn9yg_8909" {
+            entity.tags.push("music".to_string());
+        }
+    }
+    home
+}
+
+fn media_plan(home: &HomeGraph, text: &str) -> IntentPlan {
+    let mut session = Session::new();
+    session.preferred_area = Some("wohnzimmer".to_owned());
+    let outcome = nlu::parse(text, home, &mut session, &[], &Settings::pinned("en"));
+    assert!(matches!(&outcome.decision, ParseDecision::Execute), "{text:?} did not execute: {:?}", outcome.decision);
+    outcome.plan.expect("a plan")
+}
+
+/// A BARE "stop" MEANS THE THING MAKING NOISE. It is how people halt music,
+/// and it is what Home Assistant's own agent does. Read as Off it had no
+/// target at all and came back "I did not catch that" -- blaming the speaker
+/// for the shortest clear sentence there is.
+///
+/// Klar cannot check what is playing: the registry comes from
+/// /config/.storage, which records what EXISTS and never its state. So the
+/// intent is aimed at the room's player and Home Assistant decides, pausing
+/// one that plays and ignoring one that does not -- the same check its own
+/// agent makes, in process.
+#[test]
+fn a_bare_stop_pauses_the_music() {
+    let home = home_with_music_player();
+    for text in ["stop", "stop it", "pause", "stop playing", "stop the music", "pause the music"] {
+        let plan = media_plan(&home, text);
+        assert_eq!(plan.steps.len(), 1, "{text:?}: {plan:#?}");
+        assert_eq!(plan.steps[0].intent.name, "HassMediaPause", "{text:?}");
+        assert_eq!(plan.steps[0].intent.slot("entity_id"), Some("media_player.lg_dsn9yg_8909"), "{text:?}");
+    }
+}
+
+/// Naming something else must still win, so the bare-stop rule cannot
+/// swallow every stop in the language.
+#[test]
+fn a_stop_that_names_its_target_is_not_about_music() {
+    let home = home_with_music_player();
+    assert_eq!(media_plan(&home, "stop the timer").steps[0].intent.name, "HassCancelTimer");
+    assert_eq!(media_plan(&home, "turn off the living room lights").steps[0].intent.name, "HassTurnOff");
+}
+
+/// "stop the vacuum" STARTED the robot: the vacuum noun plus a start cue
+/// outranked the stop. Docking is the closest action available -- there is
+/// none for vacuum.stop -- and unambiguously better than starting something
+/// somebody just asked to stop.
+#[test]
+fn stopping_the_vacuum_does_not_start_it() {
+    let plan = plan("stop the vacuum");
+    for step in &plan.steps {
+        assert_ne!(step.intent.name, "HassVacuumStart", "asking it to stop started it: {plan:#?}");
+    }
+    assert!(plan.steps.iter().any(|step| step.intent.name == "HassVacuumReturnToBase"), "{plan:#?}");
+}
+
+// --- 9. "all the lights" means all of them -------------------------------
+
+/// Reported from a live house: "turn on kitchen lights" then "turn off all
+/// the lights" switched off the KITCHEN only, and announced it as success.
+/// The second sentence named a scope and the session narrowed it back to the
+/// first one's target.
+///
+/// Only reachable without an all-lights group entity, which is why it does
+/// not show on the shipped fixture -- there the group matches by name and the
+/// session never gets a say.
+#[test]
+fn all_the_lights_is_not_narrowed_by_the_last_room() {
+    let mut home = home();
+    home.entities.retain(|entity| !entity.entity_id.contains("alle_lichter"));
+
+    let mut session = Session::new();
+    session.preferred_area = Some("schlafzimmer".to_owned());
+    let first = nlu::parse("turn on kitchen lights", &home, &mut session, &[], &Settings::pinned("en"));
+    assert!(matches!(first.decision, ParseDecision::Execute), "{:?}", first.decision);
+
+    // Same session, so the kitchen is still remembered.
+    let outcome = nlu::parse("turn off all the lights", &home, &mut session, &[], &Settings::pinned("en"));
+    let plan = outcome.plan.expect("a plan for all the lights");
+    assert!(plan.steps.len() > 1, "all the lights hit one target only: {plan:#?}");
+    for step in &plan.steps {
+        assert_eq!(step.intent.name, "HassTurnOff", "{plan:#?}");
+    }
+
+    // And identical to a session that never heard about the kitchen.
+    let mut fresh = Session::new();
+    fresh.preferred_area = Some("schlafzimmer".to_owned());
+    let clean = nlu::parse("turn off all the lights", &home, &mut fresh, &[], &Settings::pinned("en"));
+    let clean_plan = clean.plan.expect("a plan");
+    assert_eq!(plan.steps.len(), clean_plan.steps.len(), "the session changed the scope of \"all\"");
+}
+
+/// A home that HAS a group still uses it, one intent instead of a fan-out.
+#[test]
+fn an_all_lights_group_is_still_preferred() {
+    let plan = plan("turn off all the lights");
+    assert_eq!(plan.steps.len(), 1, "{plan:#?}");
+    assert_eq!(plan.steps[0].intent.slot("entity_id"), Some("light.alle_lichter"));
+}

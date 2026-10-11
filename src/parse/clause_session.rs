@@ -87,6 +87,20 @@ pub(crate) fn replay_session_intents(
 }
 
 fn allows_session_replay(ctx: &Clause) -> bool {
+    // AN EXPLICIT "ALL" NAMES THE WHOLE HOME, so there is nothing to replay.
+    //
+    // Reported from a live house: "turn on kitchen lights" and then "turn off
+    // all the lights" switched off the KITCHEN only, and said so in a way
+    // that sounded like success ("the light in the Kitchen is off"). The
+    // second sentence named a scope and the session quietly narrowed it back
+    // to the first one's target.
+    //
+    // Only reachable in a home with no all-lights group: with one, the group
+    // matches by name and the session never gets a say, which is why it does
+    // not show up on a fixture that has one.
+    if catalog().any(ctx.tokens, catalog().all_words()) {
+        return false;
+    }
     !matches!(ctx.action, Action::GetState) || wants_status_query(ctx.tokens)
 }
 

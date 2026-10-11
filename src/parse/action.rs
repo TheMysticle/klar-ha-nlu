@@ -162,7 +162,17 @@ pub(crate) fn detect_actions_bounded(tokens: &[String], maximum: usize) -> Vec<(
                     Some(Action::FanSpeed)
                 }
             }
-            Some(VerbKind::Vacuum) => Some(Action::VacuumStart),
+            Some(VerbKind::Vacuum) => Some(if halting(tokens) {
+                // "stop the vacuum" STARTED IT, because the vacuum verb
+                // yielded VacuumStart and that outranked the stop. Sending it
+                // back to its dock is the closest thing available -- there is
+                // no action for vacuum.stop or vacuum.pause -- and it is
+                // unambiguously better than starting a robot somebody just
+                // asked to stop.
+                Action::VacuumDock
+            } else {
+                Action::VacuumStart
+            }),
             Some(VerbKind::Dock) => Some(Action::VacuumDock),
             Some(VerbKind::Scene) => Some(Action::Scene),
             Some(VerbKind::VacuumNoun) => vacuum_noun_action(tokens),
@@ -383,14 +393,54 @@ fn auf_action(tokens: &[String]) -> Option<Action> {
     }
 }
 
+/// Whether the utterance asks for something to STOP, used where another verb
+/// would otherwise start it.
+fn halting(tokens: &[String]) -> bool {
+    tokens.iter().any(|token| matches!(catalog().verb(token), Some(VerbKind::Stop | VerbKind::Pause)))
+}
+
 fn stop_action(tokens: &[String]) -> Option<Action> {
     if catalog().any(tokens, catalog().timer_nouns()) {
         Some(Action::TimerCancel)
     } else if has_media_noun(tokens) {
         Some(Action::MediaPause)
+    } else if bare_stop(tokens) {
+        // A BARE "stop" MEANS THE THING THAT IS MAKING NOISE. It is how
+        // people halt music and it is what Home Assistant's own agent does.
+        //
+        // Read as Off it had no target at all and came back "I did not catch
+        // that", which blames the speaker for the shortest clear sentence
+        // there is. Routed to MediaPause it takes the same path as "pause the
+        // music": the player is resolved from the satellite's own area, so
+        // "stop" in the bedroom does not silence the living room.
+        //
+        // WE CANNOT CHECK WHAT IS PLAYING, and do not need to. The registry
+        // comes from /config/.storage, which records what EXISTS and never
+        // what state it is in; Home Assistant keeps that in memory. So the
+        // intent is aimed at the room's player and HA decides -- it pauses a
+        // player that is playing and does nothing to one that is not, in
+        // process, which is the same check its own agent makes.
+        //
+        // With no player anywhere the media clause answers KlarNoMusicPlayer,
+        // which is a sentence about nothing playing rather than a parse
+        // failure. The one case this reads wrong is a timer ringing with no
+        // music, where "stop" means the timer; naming it ("stop the timer")
+        // still wins above, because a timer noun is checked first.
+        Some(Action::MediaPause)
     } else {
         Some(Action::Off)
     }
+}
+
+/// Whether the whole utterance was just "stop".
+///
+/// Fillers are already gone by here, so "stop", "stop it", "just stop" and
+/// "please stop" all arrive as a single token. Anything else -- a room, a
+/// device, a noun of any kind -- leaves a second token and is left to the
+/// ordinary Off path, which is what should happen: "stop the washing machine"
+/// is not a request about music.
+fn bare_stop(tokens: &[String]) -> bool {
+    tokens.len() == 1
 }
 
 fn playback_action(tokens: &[String]) -> Option<Action> {

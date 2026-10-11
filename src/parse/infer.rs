@@ -32,6 +32,12 @@ pub(crate) fn infer_action(
     bind_domain_with(action, tokens, number, domain, target_domain.is_none() && session_d.is_some())
 }
 
+/// Whether the sentence asks for something to stop, which several rules below
+/// must not override by starting it instead.
+fn halting_tokens(tokens: &[String]) -> bool {
+    tokens.iter().any(|token| matches!(catalog().verb(token), Some(VerbKind::Stop | VerbKind::Pause)))
+}
+
 fn refine_tokens(action: Action, tokens: &[String], number: Option<i32>, question: bool) -> Action {
     let vacuum = catalog().any(tokens, catalog().vacuum_nouns());
     if question && (vacuum || matches!(action, Action::VacuumDock | Action::VacuumStart)) {
@@ -40,7 +46,10 @@ fn refine_tokens(action: Action, tokens: &[String], number: Option<i32>, questio
     if vacuum && dock_hint(tokens) {
         return Action::VacuumDock;
     }
+    // Not when the sentence asks it to STOP. "stop the vacuum" started the
+    // robot, because the vacuum noun plus a start cue outranked the stop.
     if vacuum
+        && !halting_tokens(tokens)
         && (matches!(action, Action::On)
             || catalog().any(tokens, catalog().start_words())
             || catalog().any(tokens, catalog().vacuum_start()))
