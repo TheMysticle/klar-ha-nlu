@@ -3,6 +3,10 @@ WORKDIR /ui
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
 COPY web ./
+# web/src/components/KlarBrand.tsx imports ../../../docs/klar-mark.png, which
+# from /ui/src/components resolves to /docs. Without this the UI stage fails,
+# so this file could not build at all before.
+COPY docs/klar-mark.png /docs/klar-mark.png
 RUN npm run build
 
 FROM rust:1.98-bookworm AS build
