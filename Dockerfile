@@ -30,6 +30,15 @@ COPY --from=build /src/THIRD_PARTY /usr/share/doc/klar/THIRD_PARTY
 COPY --from=ui /ui/dist /usr/share/klar/ui
 COPY LICENSE /usr/share/doc/klar/LICENSE
 COPY scripts/klar-entry.sh /usr/local/bin/klar-entry.sh
-RUN chmod +x /usr/local/bin/klar-entry.sh
+# Strip CR before chmod, and assert the shebang. A Windows checkout gives
+# this file CRLF (git stores it LF and converts on checkout), so the shebang
+# becomes `#!/bin/sh\r` and the kernel looks for an interpreter named
+# `/bin/sh\r`. It fails as "exec /usr/local/bin/klar-entry.sh: no such file
+# or directory", which reads as a missing script rather than a missing
+# interpreter. .gitattributes now pins LF, and this keeps the image
+# independent of the build host regardless.
+RUN sed -i 's/\r$//' /usr/local/bin/klar-entry.sh \
+    && chmod +x /usr/local/bin/klar-entry.sh \
+    && head -1 /usr/local/bin/klar-entry.sh | grep -q '^#!/bin/sh$'
 EXPOSE 10500 10520
 ENTRYPOINT ["/usr/local/bin/klar-entry.sh"]

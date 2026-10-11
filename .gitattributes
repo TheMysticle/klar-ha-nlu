@@ -1,0 +1,10 @@
+# Shell scripts must keep LF in the working tree, on every platform.
+#
+# scripts/klar-entry.sh is COPY'd straight into the container image and run as
+# the entrypoint. On a Windows checkout git converts it to CRLF, the shebang
+# becomes `#!/bin/sh\r`, and the kernel fails to find an interpreter called
+# `/bin/sh\r` — reported as "exec /usr/local/bin/klar-entry.sh: no such file
+# or directory", which looks like the script is missing when it is not.
+# A local `docker build` then produces an image that cannot start, while the
+# same commit built in CI on Linux is fine.
+*.sh text eol=lf
