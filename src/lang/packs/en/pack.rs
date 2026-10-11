@@ -40,7 +40,7 @@ pub const PACK: LanguagePack = LanguagePack {
             "with",
             "from",
             "in",
-            "room",
+            // Keep "room" as a target token: area aliases such as "living room" need it.
             "some",
             "quickly",
             "around",
