@@ -149,10 +149,38 @@ pub(crate) fn grounded_ambiguous(ctx: &Clause) -> Option<ClauseOut> {
 
 pub(crate) fn grounded_areas(ctx: &Clause) -> Option<ClauseOut> {
     (!ctx.resolved.areas.is_empty()).then(|| {
-        let intents =
-            ctx.resolved.areas.iter().map(|area| fill_intent(ctx.action, ctx.tokens, ctx.number, None, Some(area), ctx.domain)).collect();
+        let intents = ctx
+            .resolved
+            .areas
+            .iter()
+            .map(|area| match sent_vacuum(ctx.action, area, ctx.home, ctx.tokens) {
+                Some(id) => fill_intent(ctx.action, ctx.tokens, ctx.number, Some(&id), None, None),
+                None => fill_intent(ctx.action, ctx.tokens, ctx.number, None, Some(area), ctx.domain),
+            })
+            .collect();
         finish_intents(intents, ctx)
     })
+}
+
+/// The robot to send, when an area is named alongside a vacuum action.
+///
+/// A VACUUM IS SENT somewhere rather than addressed where it sits, so the area
+/// names the JOB and must not reach Home Assistant as the target: a
+/// HassVacuumStart carrying an area that holds no vacuum matches nothing there
+/// and silently does not run. Every other domain here is furniture, and for
+/// those the area is exactly right.
+///
+/// "the kitchen light" names a lamp that lives in the kitchen. "the kitchen"
+/// after `vacuum` does not name a vacuum that lives there -- it names where
+/// the robot should go. Before this, "vacuum the kitchen" was refused while
+/// "vacuum the living room" worked, purely because that is where the dock is,
+/// and the refusal came back as "I did not catch that".
+///
+/// `unique_in_area` answers with the home's only vacuum wherever it is docked;
+/// see `the_only_vacuum` for why. With several vacuums it declines, and the
+/// ordinary ambiguity handling asks which one.
+fn sent_vacuum(action: Action, area: &str, home: &HomeGraph, tokens: &[String]) -> Option<String> {
+    matches!(action, Action::VacuumStart | Action::VacuumDock).then(|| unique_in_area(home, area, "vacuum", tokens)).flatten()
 }
 
 pub(crate) fn area_slots(
@@ -172,6 +200,11 @@ pub(crate) fn area_slots(
             LightAim::RoomGroup(id) | LightAim::Unique(id) => (Some(id), None, None),
             LightAim::OccupiedId | LightAim::AreaLights | LightAim::Clarify => (None, Some(area.to_string()), Some("light".into())),
         };
+    }
+    // See sent_vacuum: an area next to a vacuum action names the job, not
+    // where the robot lives.
+    if let Some(id) = sent_vacuum(action, area, home, tokens) {
+        return (Some(id), None, None);
     }
     let id =
         domain.filter(|d| matches!(*d, "climate" | "fan" | "media_player" | "lock")).and_then(|d| unique_in_area(home, area, d, tokens));

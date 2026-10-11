@@ -469,7 +469,48 @@ pub(crate) fn unique_in_area(home: &HomeGraph, area: &str, domain: &str, tokens:
         .filter(|e| kind.is_none_or(|want| crate::home::roles::climate_kind(e, catalog()) == Some(want)))
         .map(|e| e.entity_id.as_str())
         .collect();
-    (hits.len() == 1).then(|| hits[0].to_string())
+    if hits.len() == 1 {
+        return Some(hits[0].to_string());
+    }
+    if hits.is_empty() && domain == "vacuum" {
+        return the_only_vacuum(home);
+    }
+    None
+}
+
+/// The home's single vacuum, whatever area it is parked in.
+///
+/// A VACUUM IS THE ONLY MOBILE DEVICE IN A HOME, and an area named next to it
+/// means something different because of that. "vacuum the kitchen" asks for
+/// the kitchen to be CLEANED; it does not ask for a vacuum that lives in the
+/// kitchen, the way "the kitchen light" asks for a lamp that does. Every
+/// other domain reaching this function is furniture.
+///
+/// Without it, "vacuum the kitchen" was refused while "vacuum the living
+/// room" worked, purely because the robot happened to be docked in the living
+/// room -- and the refusal arrived as NoAction, which reads as a parsing
+/// failure rather than "no vacuum in that room".
+///
+/// Only when there is exactly ONE vacuum. With several, which robot should go
+/// is a real question, so this returns None and leaves the caller to ask it.
+///
+/// THIS DOES NOT CLEAN ONLY THAT ROOM. Room-level cleaning needs
+/// `vacuum.send_command` with vendor-specific segment ids, and this NLU has
+/// no action for that. The area is therefore dropped rather than
+/// half-honoured, and the robot cleans as it normally would -- which is what
+/// the hardware can do, and closer to the request than refusing it.
+fn the_only_vacuum(home: &HomeGraph) -> Option<String> {
+    let mut found: Option<&str> = None;
+    for entity in home.entities.iter().filter(|e| assist_visible(e, home)) {
+        if entity.domain != "vacuum" || is_infra(entity) {
+            continue;
+        }
+        if found.is_some() {
+            return None;
+        }
+        found = Some(entity.entity_id.as_str());
+    }
+    found.map(str::to_string)
 }
 
 pub(crate) fn climates_of_kind(home: &HomeGraph, tokens: &[String]) -> Vec<String> {
