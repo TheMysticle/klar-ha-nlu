@@ -1,9 +1,9 @@
 name: Klar NLU
-version: "2026.10.3"
+version: "2026.10.3-fixes"
 slug: klar_nlu
 stage: stable
 description: Lokale NLU statt Home Assistant Assist. 67 Sprachen. 100 % vs 31 % auf 9.922 DE/EN-Sätzen. Wyoming + UI.
-url: https://github.com/FABBricate-IT-Solutions/klar-ha-nlu
+url: https://github.com/TheMysticle/klar-ha-nlu
 arch:
   - amd64
   - aarch64
@@ -34,4 +34,4 @@ schema:
   token: str?
   support_bundle: bool?
   ui_locale: str?
-image: ghcr.io/fabbricate-it-solutions/klar-nlu-{arch}
+image: ghcr.io/TheMysticle/klar-nlu-{arch}
