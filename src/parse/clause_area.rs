@@ -128,6 +128,19 @@ pub(crate) fn multi_area(ctx: &Clause) -> Option<ClauseOut> {
 }
 
 pub(crate) fn grounded_entities(ctx: &Clause) -> Option<ClauseOut> {
+    // HassTimerStatus never carries entity_id (see allowed_slots in
+    // nlu/validation.rs) and has to answer from HA's own assist timer, not
+    // from a `timer.` HELPER entity -- the two are unrelated concepts that
+    // happen to share the word "timer". "my timer" fuzzy-matched an existing
+    // timer. HELPER by name, and this policy would otherwise bind it to one
+    // regardless of whether the chosen action wants an entity at all; the
+    // resulting intent then outranked the entity-less, correct one in
+    // ranking (it scores higher for having a "grounded" target), so "how
+    // long is left on my timer" asked Home Assistant about the HELPER's
+    // on/off state rather than the timer actually running.
+    if ctx.action == Action::TimerStatus {
+        return None;
+    }
     (!ctx.resolved.entities.is_empty()).then(|| {
         let intents = ctx
             .resolved

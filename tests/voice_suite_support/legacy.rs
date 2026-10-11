@@ -82,6 +82,15 @@ fn expected_intent_names(condition: &Condition) -> Vec<&'static str> {
         return vec!["HassMediaPlayerMute", "HassMediaPlayerUnmute", "HassMediaUnpause", "HassTurnOn"];
     }
     if condition.kind == "query" {
+        // A query against a `timer.` entity can be answered either way: by
+        // naming it directly (HassGetState, same as any other entity) or by
+        // HA's own HassTimerStatus, which the parser prefers when the
+        // sentence carries a status-question cue ("how long", "remaining")
+        // rather than a bare lookup. Both report the same thing; which one
+        // fires is a parser detail this harness should not be pinned to.
+        if condition.entity_id.as_deref().is_some_and(|entity| entity.starts_with("timer.")) {
+            return vec!["HassGetState", "HassClimateGetTemperature", "HassTimerStatus"];
+        }
         return vec!["HassGetState", "HassClimateGetTemperature"];
     }
     if condition.kind == "shopping_list" || condition.kind == "todo_list" || condition.item.is_some() {

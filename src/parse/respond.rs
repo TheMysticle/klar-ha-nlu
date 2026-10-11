@@ -119,6 +119,9 @@ fn describe(intent: &Intent, home: Option<&HomeGraph>) -> String {
         "HassVacuumReturnToBase" => pack.vacuum_dock.replace("{target}", &vacuum_name(&where_)),
         "HassStartTimer" | "HassIncreaseTimer" | "HassDecreaseTimer" => pack.timer_start.to_string(),
         "HassCancelTimer" => pack.timer_cancel.to_string(),
+        // Home Assistant answers this one with the actual remaining
+        // time; Klar has no state to add, so it says nothing over the top.
+        "HassTimerStatus" => String::new(),
         "HassPauseTimer" => pack.timer_pause.to_string(),
         "HassListAddItem" | "HassShoppingListAddItem" => pack.list_add.to_string(),
         "KlarGetCalendarEvents" => pack.calendar_list.replace("{items}", "").replace("{count}", "0"),

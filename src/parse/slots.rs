@@ -343,6 +343,7 @@ pub(crate) fn intent_from_action(action: Action, tokens: &[String]) -> Intent {
         Action::TimerRemove => Intent::new("HassDecreaseTimer"),
         Action::TimerCancel => Intent::new("HassCancelTimer"),
         Action::TimerPause => Intent::new("HassPauseTimer"),
+        Action::TimerStatus => Intent::new("HassTimerStatus"),
         Action::ListAdd => Intent::new("HassListAddItem"),
         Action::ListComplete => Intent::new("HassListCompleteItem"),
         Action::ClarifyWrong => Intent::new("Unknown"),
@@ -402,7 +403,16 @@ pub(crate) fn timer_clause(
         return (!intents.is_empty()).then_some(ClauseOut::Intents(intents));
     }
     let start = matches!(action, Action::TimerStart | Action::TimerAdd | Action::TimerRemove) && number.is_some();
-    if intents.is_empty() && (start || matches!(action, Action::TimerCancel | Action::TimerPause)) {
+    // TimerStatus belongs here alongside Cancel/Pause: with no registry
+    // timer entity to bind (the normal case for an assist voice timer, which
+    // has no registry presence at all), this clause used to decline and
+    // fall through to leftover_command -- a generic catch-all capped at
+    // confidence 0.68 by evidence_confidence_cap's FALLBACK_CAP, below the
+    // 0.70 floor decide_band needs to do anything but reject. Every other
+    // ungrounded timer action already took this path at full confidence
+    // (~0.95); the question about a timer deserves the same trust as a
+    // command to one.
+    if intents.is_empty() && (start || matches!(action, Action::TimerCancel | Action::TimerPause | Action::TimerStatus)) {
         intents.push(fill_intent(action, tokens, number, None, None, None));
     }
     intents.retain(|i| i.name != "Unknown");

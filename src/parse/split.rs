@@ -244,16 +244,45 @@ fn is_same_command(a: Action, b: Action) -> bool {
             )
             | (Action::CoverOpen, Action::CoverClose)
             | (Action::CoverClose, Action::CoverOpen)
+            // "Time remaining on the oven timer?" split into ["time",
+            // "remaining", "on", "oven"] (no "timer" at all) and a second
+            // clause holding only "timer" -- "on" read as Action::On here,
+            // paired against TimerStatus from the lone "timer" token, and
+            // that pairing was absent, so the cut fired and severed "timer"
+            // from the very words ("remaining") that mark it as a question.
             | (
                 Action::On | Action::Off | Action::SetLight | Action::MediaPause | Action::MediaPlay,
-                Action::TimerStart | Action::TimerAdd | Action::TimerRemove | Action::TimerCancel | Action::TimerPause
+                Action::TimerStart
+                    | Action::TimerAdd
+                    | Action::TimerRemove
+                    | Action::TimerCancel
+                    | Action::TimerPause
+                    | Action::TimerStatus
             )
             | (
-                Action::TimerStart | Action::TimerAdd | Action::TimerRemove | Action::TimerCancel | Action::TimerPause,
+                Action::TimerStart
+                    | Action::TimerAdd
+                    | Action::TimerRemove
+                    | Action::TimerCancel
+                    | Action::TimerPause
+                    | Action::TimerStatus,
                 Action::On | Action::Off | Action::SetLight | Action::MediaPause | Action::MediaPlay
             )
-            | (Action::GetState, Action::TimerStart | Action::TimerAdd | Action::TimerRemove | Action::TimerCancel | Action::TimerPause)
-            | (Action::TimerStart | Action::TimerAdd | Action::TimerRemove | Action::TimerCancel | Action::TimerPause, Action::GetState)
+            // TimerStatus is itself a question about a timer ("how long is
+            // left on my timer"), and "is"/"left" register their own
+            // Action::GetState hypothesis alongside it. Without TimerStatus
+            // here, the cut logic below split the two apart -- the GetState
+            // half kept the question words and the Timer half lost them,
+            // landing on a lone "timer" token with no question context left
+            // to recognise, so `timer_kind` fell through to TimerStart.
+            | (
+                Action::GetState,
+                Action::TimerStart | Action::TimerAdd | Action::TimerRemove | Action::TimerCancel | Action::TimerPause | Action::TimerStatus
+            )
+            | (
+                Action::TimerStart | Action::TimerAdd | Action::TimerRemove | Action::TimerCancel | Action::TimerPause | Action::TimerStatus,
+                Action::GetState
+            )
             | (Action::GetState, Action::VacuumDock | Action::VacuumStart)
             | (Action::VacuumDock | Action::VacuumStart, Action::GetState)
             | (Action::VacuumStart | Action::VacuumDock, Action::On | Action::Off)

@@ -29,6 +29,7 @@ pub enum Action {
     TimerRemove,
     TimerCancel,
     TimerPause,
+    TimerStatus,
     ListAdd,
     ListComplete,
     ClarifyWrong,
@@ -232,6 +233,7 @@ pub(crate) fn is_hard_command(command: Option<Action>, tokens: &[String]) -> boo
                 | Action::TimerRemove
                 | Action::TimerCancel
                 | Action::TimerPause
+                | Action::TimerStatus
                 | Action::ListAdd
                 | Action::ListComplete
         )

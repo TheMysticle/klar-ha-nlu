@@ -110,6 +110,7 @@ pub(super) const VERBS: &[(&str, VerbKind)] = &[
     ("wrong", VerbKind::ClarifyWrong),
     ("nope", VerbKind::ClarifyWrong),
     ("timer", VerbKind::Timer),
+    ("timers", VerbKind::Timer),
     ("countdown", VerbKind::Timer),
     ("list", VerbKind::List),
     ("shopping", VerbKind::List),

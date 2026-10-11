@@ -197,6 +197,7 @@ pub(super) fn requires_target(name: &str) -> bool {
             | "HassDecreaseTimer"
             | "HassCancelTimer"
             | "HassPauseTimer"
+            | "HassTimerStatus"
             | "HassListAddItem"
             | "HassListCompleteItem"
             | "HassShoppingListAddItem"
@@ -248,6 +249,12 @@ fn allowed_domain(domain: &str) -> bool {
             | "script"
             | "input_boolean"
             | "calendar"
+            // HassTimerStatus carries domain="timer" from domain_hint when
+            // it has no entity_id/area to scope by. Without this it failed
+            // validate_target's final domain check, which is a second,
+            // independent rejection from the missing allowed_slots entry
+            // above -- both had to be fixed.
+            | "timer"
     )
 }
 
@@ -283,6 +290,21 @@ fn allowed_slots(name: &str) -> &'static [&'static str] {
             &["entity_id", "domain", "summary", "day", "hour", "in_days", "need"]
         }
         "KlarNoMusicPlayer" => &[],
+        // "domain" matches every other status-query intent (HassGetState,
+        // HassClimateGetTemperature): leftover_command attaches it from the
+        // sentence's own domain_hint, and without it here validate_slots
+        // rejected the WHOLE intent for carrying a slot it did not allow --
+        // which emptied the plan at the final validation stage and fell
+        // back to an unrelated default clarify ("What should I turn on?"),
+        // rather than failing anywhere that looked like a timer problem.
+        // entity_id: a NAMED timer ("the oven timer") binds to its own
+        // timer.* registry entity via the "timer" policy, same as any
+        // other named entity would. Without it, validate_slots rejected
+        // the correctly-bound, highest-confidence candidate outright, and
+        // ranking fell back to whichever weaker alternative survived --
+        // here, HassStartTimer, answering a status question by (re)setting
+        // the timer going instead.
+        "HassTimerStatus" => &["entity_id", "name", "area", "domain", "start_hours", "start_minutes", "start_seconds"],
         _ => &[],
     }
 }

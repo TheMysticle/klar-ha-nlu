@@ -105,7 +105,16 @@ pub(super) fn build_analyses(
                 action_evidence.source = "lexicon_exact_list_complete".into();
                 action_evidence.score = 1.0;
                 action_evidence.exact = true;
-            } else if question_context && evidence_action == Action::GetState {
+            } else if question_context && matches!(evidence_action, Action::GetState | Action::TimerStatus) {
+                // TimerStatus IS a question's answer, the timer domain's own
+                // flavour of GetState -- kept as a separate Action because it
+                // maps to HassTimerStatus rather than HassGetState, which is
+                // what lets Home Assistant answer from an assist timer's
+                // remaining time instead of a `timer.` entity's on/off state.
+                // Without this it fell into the question_conflict branch
+                // below, capped at 0.45, and lost to the GetState candidate
+                // from "is" every time -- "how long is left on my timer"
+                // answered by checking an unrelated timer ENTITY's state.
                 action_evidence.source = if action_evidence.exact { "lexicon_exact_question" } else { "question_context" }.into();
                 action_evidence.score = 0.96;
             } else if question_context {
@@ -195,7 +204,8 @@ pub(super) fn build_analyses(
                         policy_evidence.source = "lexicon_exact_list_complete".into();
                         policy_evidence.score = 1.0;
                         policy_evidence.exact = true;
-                    } else if question_context && evidence_action == Action::GetState {
+                    } else if question_context && matches!(evidence_action, Action::GetState | Action::TimerStatus) {
+                        // See the matching branch above.
                         policy_evidence.source = if policy_evidence.exact { "lexicon_exact_question" } else { "question_context" }.into();
                         policy_evidence.score = 0.96;
                     } else if question_context {

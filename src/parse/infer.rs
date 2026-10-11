@@ -151,6 +151,12 @@ pub(crate) fn prefer_action(actions: &[(usize, Action)]) -> Option<Action> {
         Action::TimerRemove,
         Action::TimerCancel,
         Action::TimerPause,
+        // ASKING about a timer must outrank STARTING one, because the same
+        // tokens that signal a question ("how long", "is", "left") carry no
+        // verb of their own and would otherwise let TimerStart win by being
+        // the only other timer action detected ("how long is left on my
+        // timer" asked for a duration to START a timer with).
+        Action::TimerStatus,
         Action::TimerStart,
         Action::ListComplete,
         Action::ListAdd,
@@ -452,5 +458,20 @@ mod tests {
         let tokens = vec!["mach".into(), "auf".into()];
         assert_eq!(infer_action(Action::GetState, &tokens, None, false, &session, None), Action::CoverOpen);
         assert_eq!(infer_action(Action::GetState, &tokens, None, true, &session, Some("cover")), Action::GetState);
+    }
+
+    // `detect_actions` + `prefer_action` is the exact pair `action_hypotheses`
+    // (nlu/evidence.rs) calls, which is what decided the real symptom: "how
+    // long is left on my timer" picked Action::TimerStart, with a confidence
+    // of 1.0, over the Action::TimerStatus that `timer_kind` also produces
+    // for the same tokens -- because TimerStatus was absent from RANK
+    // entirely, so the tie between two detected actions at different token
+    // positions fell back to `actions.iter().find(...)`, in token order.
+    #[test]
+    fn asking_about_a_timer_outranks_starting_one() {
+        let tokens: Vec<String> = ["how", "long", "is", "left", "on", "timer"].iter().map(|t| t.to_string()).collect();
+        let detected = crate::parse::action::detect_actions(&tokens);
+        assert!(detected.iter().any(|(_, a)| *a == Action::TimerStatus), "{detected:?}");
+        assert_eq!(prefer_action(&detected), Some(Action::TimerStatus), "{detected:?}");
     }
 }
