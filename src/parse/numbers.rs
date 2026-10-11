@@ -31,7 +31,7 @@ pub fn extract_numbers(tokens: &[String]) -> Vec<i32> {
             }
         }
         if let Some(val) = cat.number(t) {
-            if is_room_index(tokens, i, val) {
+            if is_room_index(tokens, i, val) || pronoun_one(tokens, i) {
                 i += 1;
                 continue;
             }
@@ -74,6 +74,27 @@ fn parse_german_compound(token: &str) -> Option<i32> {
         return None;
     }
     Some(ones + tens)
+}
+
+/// Whether "one" here is the PRONOUN rather than the number.
+///
+/// English uses the same word for both, and the pronoun is far commoner in
+/// speech to an assistant: "not that one", "the other one", "which one".
+/// Read as a number it became a value, so "not that one" -- a CORRECTION --
+/// set the light to brightness 1, and "the other one" did the same. Both are
+/// the opposite of what was asked, and neither looked like a failure.
+///
+/// Decided by the word before, which is what makes it a pronoun. Nothing
+/// here fires for a bare number ("set it to one" still means 1) and the
+/// words are English, so no other pack is affected.
+fn pronoun_one(tokens: &[String], i: usize) -> bool {
+    if tokens[i] != "one" {
+        return false;
+    }
+    let Some(previous) = i.checked_sub(1).and_then(|index| tokens.get(index)) else {
+        return false;
+    };
+    matches!(previous.as_str(), "that" | "this" | "other" | "another" | "which" | "wrong" | "first" | "last" | "next")
 }
 
 fn is_room_index(tokens: &[String], i: usize, n: i32) -> bool {

@@ -247,16 +247,16 @@ pub(crate) fn color_word(tokens: &[String]) -> Option<String> {
 }
 
 pub(crate) fn light_level(tokens: &[String]) -> Option<LightLevel> {
-    if tokens.iter().any(|token| matches!(token.as_str(), "mittelhell" | "medium")) {
+    if tokens.iter().any(|token| matches!(token.as_str(), "mittelhell" | "medium" | "half")) {
         return Some(LightLevel::Absolute(50));
     }
-    if tokens.iter().any(|token| matches!(token.as_str(), "heller" | "brighter")) {
+    if tokens.iter().any(|token| matches!(token.as_str(), "heller" | "brighter" | "brighten")) {
         return Some(LightLevel::Step("up"));
     }
     if tokens.iter().any(|token| matches!(token.as_str(), "dunkler" | "dimmer" | "darker" | "dimme" | "dimmen" | "dim")) {
         return Some(LightLevel::Step("down"));
     }
-    if tokens.iter().any(|token| matches!(token.as_str(), "voll" | "volle" | "full" | "maximal" | "maximum" | "hell" | "bright")) {
+    if tokens.iter().any(|token| matches!(token.as_str(), "voll" | "volle" | "full" | "maximal" | "maximum" | "max" | "hell" | "bright")) {
         return Some(LightLevel::Absolute(100));
     }
     None

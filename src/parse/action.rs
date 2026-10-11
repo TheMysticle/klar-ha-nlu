@@ -135,7 +135,7 @@ pub(crate) fn detect_actions_bounded(tokens: &[String], maximum: usize) -> Vec<(
             }
             Some(VerbKind::Brightness) => Some(
                 if crate::parse::numbers::first_number(tokens).is_some()
-                    || tokens.iter().any(|token| matches!(token.as_str(), "voll" | "volle" | "full" | "maximal" | "maximum"))
+                    || tokens.iter().any(|token| matches!(token.as_str(), "voll" | "volle" | "full" | "maximal" | "maximum" | "max"))
                 {
                     Action::SetLight
                 } else {

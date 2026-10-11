@@ -155,3 +155,108 @@ fn sending_the_vacuum_to_its_dock_still_docks() {
     let plan = plan("send the vacuum back to its dock");
     assert!(plan.steps.iter().any(|step| step.intent.name == "HassVacuumReturnToBase"), "{plan:#?}");
 }
+
+// --- 4. levels people actually name --------------------------------------
+
+/// "brighten" was rejected outright while "brighter" worked, and "half" and
+/// "max" fell through to a state query -- so the light was described rather
+/// than set, and nothing looked wrong.
+#[test]
+fn ordinary_words_for_a_light_level_set_the_level() {
+    for (text, slot, value) in [
+        ("brighten the living room lights", "brightness_step", "up"),
+        ("make the living room lights brighter", "brightness_step", "up"),
+        ("dim the living room lights", "brightness_step", "down"),
+        ("make the living room lights dimmer", "brightness_step", "down"),
+        ("living room lights to half", "brightness", "50"),
+        ("max brightness in the living room", "brightness", "100"),
+        ("set the living room lights to full brightness", "brightness", "100"),
+        ("living room lights to 50 percent", "brightness", "50"),
+    ] {
+        let plan = plan(text);
+        let intent = &plan.steps[0].intent;
+        assert_eq!(intent.name, "HassLightSet", "{text:?}");
+        assert_eq!(intent.slot(slot), Some(value), "{text:?}");
+    }
+}
+
+// --- 5. colours ----------------------------------------------------------
+
+/// Only CSS colour names are added, because the slot reaches Home Assistant
+/// as a colour NAME and a word it does not know fails the service call. So
+/// this asserts the canonical value too, not merely that something parsed.
+#[test]
+fn common_colours_are_understood() {
+    for (text, colour) in [
+        ("set the living room lights to cyan", "cyan"),
+        ("turn the living room lights teal", "teal"),
+        ("make the living room lights magenta", "magenta"),
+        ("make the living room purple", "purple"),
+        ("make the living room warm white", "warmwhite"),
+    ] {
+        let plan = plan(text);
+        let intent = &plan.steps[0].intent;
+        assert_eq!(intent.name, "HassLightSet", "{text:?}");
+        assert_eq!(intent.slot("color"), Some(colour), "{text:?}");
+    }
+}
+
+// --- 6. a thermostat is not a light --------------------------------------
+
+/// "set the bedroom thermostat to 21" produced HassLightSet with
+/// brightness=21: the word `thermostat` was missing from climate_nouns, so
+/// the number landed on the lights. Asking for 21 degrees and getting a dim
+/// bedroom is the kind of wrong that is hard to attribute to a missing noun.
+///
+/// Asserted as "must not be a light change" rather than "must be
+/// HassClimateSetTemperature", because a climate change asks for
+/// confirmation first and a Confirm deliberately carries no plan and no
+/// candidates -- only an id for the answer. The regression is exactly what
+/// is checked here: before, this EXECUTED a light change.
+#[test]
+fn a_thermostat_is_not_a_light() {
+    let home = home();
+    let mut session = Session::new();
+    session.preferred_area = Some("wohnzimmer".to_owned());
+    let outcome = nlu::parse("set the bedroom thermostat to 21", &home, &mut session, &[], &Settings::pinned("en"));
+    if let Some(plan) = outcome.plan {
+        for step in &plan.steps {
+            assert_ne!(step.intent.name, "HassLightSet", "a thermostat request became a light change: {plan:#?}");
+            assert_eq!(step.intent.slot("brightness"), None, "{plan:#?}");
+        }
+    }
+    for candidate in &outcome.candidates {
+        for step in &candidate.plan.steps {
+            assert_ne!(step.intent.name, "HassLightSet", "a thermostat candidate is a light change: {candidate:#?}");
+        }
+    }
+}
+
+// --- 7. "one" is usually a pronoun ---------------------------------------
+
+/// English spells the number and the pronoun the same, and in speech to an
+/// assistant the pronoun is commoner. Read as a number, "not that one" -- a
+/// CORRECTION -- set the light to brightness 1, and "the other one" did too.
+/// Neither should set a level.
+#[test]
+fn that_one_is_not_the_number_one() {
+    let home = home();
+    for text in ["not that one", "the other one", "no I meant the kitchen"] {
+        let mut session = Session::new();
+        session.preferred_area = Some("wohnzimmer".to_owned());
+        let outcome = nlu::parse(text, &home, &mut session, &[], &Settings::pinned("en"));
+        if let Some(plan) = outcome.plan {
+            for step in &plan.steps {
+                assert_ne!(step.intent.slot("brightness"), Some("1"), "{text:?} set a brightness: {plan:#?}");
+            }
+        }
+    }
+}
+
+/// The number still works where it IS a number, so the rule above cannot
+/// quietly swallow it.
+#[test]
+fn one_is_still_a_number_when_it_is_one() {
+    let plan = plan("set the living room lights to one percent");
+    assert_eq!(plan.steps[0].intent.slot("brightness"), Some("1"), "{plan:#?}");
+}
